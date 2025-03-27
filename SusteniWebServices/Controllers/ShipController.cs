@@ -242,6 +242,8 @@ public class ShipGeneratorItem
     public double SOxBefore { get; set; } = 0;
     public double SOxAfter { get; set; } = 0;
 
+    public int? ShutdownPriority { get; set; } = 0;
+
     public ErrorItem Error { get; set; } = new ErrorItem();
     public AccountLogOnInfoItem logonInfo { get; set; } = new AccountLogOnInfoItem();
 }
@@ -524,6 +526,7 @@ namespace SusteniWebServices.Controllers
 
                     foreach (var generator in generators)
                     {
+                        
                         if (!Guid.TryParse(generator.GeneratorGuid, out Guid generatorGuid) ||
                             !Guid.TryParse(generator.ShipGuid, out Guid shipGuid))
                         {
@@ -593,7 +596,15 @@ namespace SusteniWebServices.Controllers
                             cmd.Parameters.AddWithValue("@Name", generator.Name);
                             cmd.Parameters.AddWithValue("@kW", generator.kW);
                             cmd.Parameters.AddWithValue("@KgDieselkWh", generator.KgDieselkWh);
-                            cmd.Parameters.AddWithValue("@FuelTypeGuid", string.IsNullOrEmpty(generator.FuelTypeGuid) ? DBNull.Value : new Guid(generator.FuelTypeGuid));
+                            if (Guid.TryParse(generator.FuelTypeGuid, out Guid fuelTypeGuid))
+                            {
+                                cmd.Parameters.Add("@FuelTypeGuid", SqlDbType.UniqueIdentifier).Value = fuelTypeGuid;
+                            }
+                            else
+                            {
+                                cmd.Parameters.Add("@FuelTypeGuid", SqlDbType.UniqueIdentifier).Value = DBNull.Value;
+                            }
+
                             cmd.Parameters.AddWithValue("@MaintenanceCost", generator.MaintenanceCost);
                             cmd.Parameters.AddWithValue("@FuelPrice", generator.FuelPrice);
                             cmd.Parameters.AddWithValue("@PowerProduction", generator.PowerProduction);
@@ -614,6 +625,64 @@ namespace SusteniWebServices.Controllers
                 return StatusCode(500, new { error = "Erro ao salvar os geradores.", details = ex.Message });
             }
         }
+
+
+
+
+        [HttpGet]
+        [Route("GetFuelTypesByShip")]
+        public IActionResult GetFuelTypesByShip(Guid shipId)
+        {
+            try
+            {
+                using (SqlConnection cnn = new SqlConnection(@"Server=localhost;
+                    Database=Susteni;
+                    Integrated Security=True;
+                    TrustServerCertificate=True;
+                    Encrypt=False;"))
+                {
+                    cnn.Open();
+
+                    string query = @"
+                        SELECT DISTINCT FT.FuelTypeGuid, FT.Name 
+                        FROM Generators G
+                        INNER JOIN FuelTypes FT ON G.FuelTypeGuid = FT.FuelTypeGuid
+                        WHERE G.ShipGuid = @ShipGuid AND G.FuelTypeGuid IS NOT NULL";
+
+                    using (SqlCommand cmd = new SqlCommand(query, cnn))
+                    {
+                        cmd.Parameters.AddWithValue("@ShipGuid", shipId);
+
+                        var list = new List<object>();
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                list.Add(new
+                                {
+                                    FuelTypeGuid = reader.GetGuid(0),
+                                    Name = reader.GetString(1)
+                                });
+                            }
+                        }
+
+                        return Ok(list);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Erro ao buscar tipos de combustível: " + ex.Message);
+                return StatusCode(500, "Erro ao buscar tipos de combustível");
+            }
+        }
+
+
+
+
+
+
+
 
 
 
