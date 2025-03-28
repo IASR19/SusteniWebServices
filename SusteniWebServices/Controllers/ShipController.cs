@@ -23,6 +23,8 @@ using Microsoft.VisualStudio.Services.WebApi;
 
 
 
+
+
 public class GeneratorRequest
 {
     public string GeneratorGuid { get; set; }
@@ -247,6 +249,41 @@ public class ShipGeneratorItem
     public ErrorItem Error { get; set; } = new ErrorItem();
     public AccountLogOnInfoItem logonInfo { get; set; } = new AccountLogOnInfoItem();
 }
+
+  public class FuelPriceItem
+    {
+        public Guid ShipGuid { get; set; }
+        public string FuelType { get; set; }
+        public decimal Price { get; set; }
+    }
+
+    public class FuelPriceSaveRequest
+    {
+        public List<FuelPriceItem> Data { get; set; }
+        public LogonInfo logonInfo { get; set; }
+    }
+
+    public class LogonInfo
+    {
+        public string Server { get; set; }
+        public string Database { get; set; }
+        public string UserId { get; set; }
+        public string Password { get; set; }
+        public LogonParameters Parameters { get; set; }
+    }
+
+    public class LogonParameters
+    {
+        public string filter { get; set; }
+        public string order { get; set; }
+        public string field { get; set; }
+        public string fieldValue { get; set; }
+        public int numbers { get; set; }
+        public bool yesno { get; set; }
+    }
+
+
+
 
 
 public class ShipGeneratorModesItem
@@ -6057,6 +6094,53 @@ namespace SusteniWebServices.Controllers
 
             return output;
         }
+
+
+        [HttpPost("SaveFuelPrices")]
+        public IActionResult SaveFuelPrices([FromBody] FuelPriceSaveRequest request)
+        {
+            try
+            {
+                var connectionString = $"Server={request.logonInfo.Server};Database={request.logonInfo.Database};Trusted_Connection=True;";
+
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    foreach (var item in request.Data)
+                    {
+                        var command = new SqlCommand(@"
+                            IF EXISTS (
+                                SELECT 1 FROM FuelPrices 
+                                WHERE ShipGuid = @ShipGuid AND FuelType = @FuelType
+                            )
+                            BEGIN
+                                UPDATE FuelPrices 
+                                SET Price = @Price 
+                                WHERE ShipGuid = @ShipGuid AND FuelType = @FuelType
+                            END
+                            ELSE
+                            BEGIN
+                                INSERT INTO FuelPrices (ShipGuid, FuelType, Price)
+                                VALUES (@ShipGuid, @FuelType, @Price)
+                            END", connection);
+
+                        command.Parameters.AddWithValue("@ShipGuid", item.ShipGuid);
+                        command.Parameters.AddWithValue("@FuelType", item.FuelType);
+                        command.Parameters.AddWithValue("@Price", item.Price);
+
+                        command.ExecuteNonQuery();
+                    }
+
+                    return Ok(new { message = "Fuel prices saved successfully!" });
+                }
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = "Error saving fuel prices.", details = ex.Message });
+            }
+        }
+
 
         #endregion
 
