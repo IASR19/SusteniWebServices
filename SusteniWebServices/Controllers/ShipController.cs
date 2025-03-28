@@ -526,16 +526,24 @@ namespace SusteniWebServices.Controllers
 
                     foreach (var generator in generators)
                     {
-                        
-                        if (!Guid.TryParse(generator.GeneratorGuid, out Guid generatorGuid) ||
-                            !Guid.TryParse(generator.ShipGuid, out Guid shipGuid))
+                        // Gera novo GUID para evitar sobrescrever dados
+                        Guid newGeneratorGuid = Guid.NewGuid();
+                        generator.GeneratorGuid = newGeneratorGuid.ToString();
+
+                        // Valida apenas ShipGuid
+                        string shipGuid = generator.ShipGuid;
+                        if (string.IsNullOrWhiteSpace(shipGuid))
                         {
-                            Console.WriteLine($"GUID inválido: GeneratorGuid ({generator.GeneratorGuid}) ou ShipGuid ({generator.ShipGuid})");
-                            return BadRequest($"GUID inválido para GeneratorGuid ({generator.GeneratorGuid}) ou ShipGuid ({generator.ShipGuid})");
+                            Console.WriteLine("ShipGuid não pode estar vazio.");
+                            return BadRequest("ShipGuid não pode estar vazio.");
                         }
 
+
+                        
                         // 🔄 Sempre gera um novo GUID para evitar sobrescrever dados
-                        generator.GeneratorGuid = Guid.NewGuid().ToString();
+                       // newGeneratorGuid = Guid.NewGuid();
+                       // generator.GeneratorGuid = newGeneratorGuid.ToString();
+
                         // Obtém todos os nomes existentes para esse ShipGuid
                         List<string> existingNames = new List<string>();
                         using (SqlCommand cmdNames = new SqlCommand("SELECT Name FROM Generators WHERE ShipGuid = @ShipGuid", cnn))
@@ -581,6 +589,19 @@ namespace SusteniWebServices.Controllers
 
                         generator.Order = newOrder;
 
+                        Console.WriteLine("🚨 DUMP DOS VALORES ANTES DO INSERT:");
+                        Console.WriteLine($"GeneratorGuid: {newGeneratorGuid}");
+                        Console.WriteLine($"ShipGuid: {generator.ShipGuid}");
+                        Console.WriteLine($"Name: {generator.Name}");
+                        Console.WriteLine($"kW: {generator.kW}");
+                        Console.WriteLine($"KgDieselkWh: {generator.KgDieselkWh}");
+                        Console.WriteLine($"FuelTypeGuid: {generator.FuelTypeGuid}");
+                        Console.WriteLine($"MaintenanceCost: {generator.MaintenanceCost}");
+                        Console.WriteLine($"FuelPrice: {generator.FuelPrice}");
+                        Console.WriteLine($"PowerProduction: {generator.PowerProduction}");
+                        Console.WriteLine($"Order: {generator.Order}");
+
+
                         string sql = @"
                             INSERT INTO Generators 
                             (GeneratorGuid, ShipGuid, Name, kW, KgDieselkWh, FuelTypeGuid, MaintenanceCost, FuelPrice, PowerProduction, [Order])
@@ -591,8 +612,8 @@ namespace SusteniWebServices.Controllers
 
                         using (SqlCommand cmd = new SqlCommand(sql, cnn))
                         {
-                            cmd.Parameters.Add("@GeneratorGuid", SqlDbType.UniqueIdentifier).Value = new Guid(generator.GeneratorGuid);
-                            cmd.Parameters.Add("@ShipGuid", SqlDbType.UniqueIdentifier).Value = shipGuid;
+                            cmd.Parameters.Add("@GeneratorGuid", SqlDbType.UniqueIdentifier).Value = newGeneratorGuid;
+                            cmd.Parameters.Add("@ShipGuid", SqlDbType.NVarChar, 80).Value = shipGuid;
                             cmd.Parameters.AddWithValue("@Name", generator.Name);
                             cmd.Parameters.AddWithValue("@kW", generator.kW);
                             cmd.Parameters.AddWithValue("@KgDieselkWh", generator.KgDieselkWh);
@@ -604,6 +625,9 @@ namespace SusteniWebServices.Controllers
                             {
                                 cmd.Parameters.Add("@FuelTypeGuid", SqlDbType.UniqueIdentifier).Value = DBNull.Value;
                             }
+
+
+
 
                             cmd.Parameters.AddWithValue("@MaintenanceCost", generator.MaintenanceCost);
                             cmd.Parameters.AddWithValue("@FuelPrice", generator.FuelPrice);
@@ -3121,17 +3145,20 @@ namespace SusteniWebServices.Controllers
                 cnn.Open();
                 using (SqlCommand cmd = new SqlCommand(sql, cnn))
                 {
-                    cmd.Parameters.AddWithValue("@GeneratorGuid", newGeneratorGuid);
-                    cmd.Parameters.AddWithValue("@ShipGuid", originalGenerator.ShipGuid);
-                    cmd.Parameters.AddWithValue("@Name", newGeneratorName);
-                    cmd.Parameters.AddWithValue("@Order", originalGenerator.Order);
-                    cmd.Parameters.Add("@FuelTypeGuid", SqlDbType.UniqueIdentifier).Value =
-                        string.IsNullOrEmpty(originalGenerator.FuelTypeGuid?.ToString()) ? (object)DBNull.Value : Guid.Parse(originalGenerator.FuelTypeGuid.ToString());
-                    cmd.Parameters.Add("@TypeGuid", SqlDbType.UniqueIdentifier).Value = 
-                        string.IsNullOrEmpty(originalGenerator.TypeGuid) ? (object)DBNull.Value : Guid.Parse(originalGenerator.TypeGuid);
-                    cmd.Parameters.AddWithValue("@kW", originalGenerator.kW);
-                    cmd.Parameters.AddWithValue("@KgDieselkWh", originalGenerator.KgDieselkWh);
-                    cmd.Parameters.Add("@EfficientMotorSwitchboard", SqlDbType.Bit).Value = originalGenerator.EfficientMotorSwitchboard;
+                    cmd.Parameters.Add("@GeneratorGuid", SqlDbType.NVarChar, 80).Value = newGeneratorGuid.ToString();
+                    cmd.Parameters.Add("@ShipGuid", SqlDbType.NVarChar, 80).Value = originalGenerator.ShipGuid;
+                    cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 200).Value = newGeneratorName;
+                    cmd.Parameters.Add("@Order", SqlDbType.SmallInt).Value = originalGenerator.Order;
+
+                    cmd.Parameters.Add("@TypeGuid", SqlDbType.NVarChar, 80).Value =
+                        string.IsNullOrWhiteSpace(originalGenerator.TypeGuid) ? (object)DBNull.Value : originalGenerator.TypeGuid;
+
+                    cmd.Parameters.Add("@FuelTypeGuid", SqlDbType.NVarChar, 80).Value =
+                        string.IsNullOrWhiteSpace(originalGenerator.FuelTypeGuid) ? (object)DBNull.Value : originalGenerator.FuelTypeGuid;
+
+                    cmd.Parameters.Add("@kW", SqlDbType.Int).Value = originalGenerator.kW;
+                    cmd.Parameters.Add("@KgDieselkWh", SqlDbType.Float).Value = originalGenerator.KgDieselkWh;
+                    cmd.Parameters.Add("@EfficientMotorSwitchboard", SqlDbType.Float).Value = originalGenerator.EfficientMotorSwitchboard;
                     cmd.Parameters.Add("@PowerProduction", SqlDbType.Bit).Value = originalGenerator.PowerProduction;
                     cmd.Parameters.Add("@ExcludeAutoTune", SqlDbType.Bit).Value = originalGenerator.ExcludeAutoTune;
 
@@ -3146,6 +3173,7 @@ namespace SusteniWebServices.Controllers
                     }
                 }
             }
+
         }
 
 
