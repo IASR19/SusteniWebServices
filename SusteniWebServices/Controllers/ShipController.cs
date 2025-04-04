@@ -2295,7 +2295,7 @@ namespace SusteniWebServices.Controllers
 
             string conString;
 
-            string sql = "SELECT G.GeneratorGuid, G.ShipGuid, G.PowerProduction, GEI.ProfilGuid, G.Name, G.[Order], G.kW, G.KgDieselkWh, GEI.EffectBefore, GEI.EffectAfter, GEI.Faktor, G.TypeGuid, G.FuelTypeGuid, ";
+            string sql = "SELECT G.GeneratorGuid, G.ShipGuid, G.PowerProduction, GEI.ProfilGuid, G.Name, G.[Order], G.kW, G.KgDieselkWh, GEI.EffectBefore, GEI.EffectAfter, GEI.Faktor, G.TypeGuid, G.FuelTypeGuid, G.EfficientMotorSwitchboard, ";
             sql += "MaintenanceCost=(SELECT Sum(GEN.MaintenanceCost * (EM.HoursBefore - EM.HoursAfter)) " +
                     "FROM OperationModes AS OM INNER JOIN Generators AS GEN ON OM.ShipGuid = GEN.ShipGuid LEFT OUTER JOIN GeneratorModes AS EM ON OM.OperationModeGuid = EM.OperationModeGuid AND GEN.GeneratorGuid = EM.GeneratorGuid " +
                     " AND " + logonInfo.Parameters.fieldValue + "  " +
@@ -2375,6 +2375,10 @@ namespace SusteniWebServices.Controllers
                         if (!rdr.IsDBNull(rdr.GetOrdinal("SOxAfter"))) item.SOxAfter = rdr.GetDouble(rdr.GetOrdinal("SOxAfter"));
                         if (!rdr.IsDBNull(rdr.GetOrdinal("TypeGuid"))) item.TypeGuid = rdr.GetString(rdr.GetOrdinal("TypeGuid"));
                         if (!rdr.IsDBNull(rdr.GetOrdinal("FuelTypeGuid"))) item.FuelTypeGuid = rdr.GetString(rdr.GetOrdinal("FuelTypeGuid"));
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("EfficientMotorSwitchboard"))) item.EfficientMotorSwitchboard = Convert.ToDouble(rdr.GetValue(rdr.GetOrdinal("EfficientMotorSwitchboard")));
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("MaintenanceCost"))) item.MaintenanceCost = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("MaintenanceCost")));
+                        
+
 
                         if (!item.PowerProduction)
                         {
@@ -2528,7 +2532,8 @@ namespace SusteniWebServices.Controllers
 
             string conString;
 
-            string sql = "SELECT G.GeneratorGuid, G.ShipGuid, G.PowerProduction, GEI.ProfilGuid, G.Name, G.OrderNumber AS [Order], G.kW, G.KgDieselkWh, GEI.EffectBefore, GEI.EffectAfter, GEI.Faktor, ";
+            string sql = "SELECT G.GeneratorGuid, G.ShipGuid, G.PowerProduction, GEI.ProfilGuid, G.Name, G.OrderNumber AS [Order], G.kW, G.KgDieselkWh, G.TypeGuid, G.FuelTypeGuid, G.EfficientMotorSwitchboard, G.MaintenanceCost, GEI.EffectBefore, GEI.EffectAfter, GEI.Faktor, ";
+
             sql += "MaintenanceCost=(SELECT Sum(GEN.MaintenanceCost * (EM.HoursBefore - EM.HoursAfter)) " +
                     "FROM OperationModes AS OM INNER JOIN Generators AS GEN ON OM.ShipGuid = GEN.ShipGuid LEFT OUTER JOIN GeneratorModes AS EM ON OM.OperationModeGuid = EM.OperationModeGuid AND GEN.GeneratorGuid = EM.GeneratorGuid " +
                     " AND " + logonInfo.Parameters.fieldValue + "  " +
@@ -3148,7 +3153,15 @@ namespace SusteniWebServices.Controllers
 
             // Obter a lista de geradores existentes para encontrar o próximo número disponível
             List<ShipGeneratorItem> generators = CreateShipGeneratorList(logonInfo);
-            int maxNumber = 0;
+            // Encontrar o maior número de ordem
+
+            // Encontrar o maior número de ordem
+            int maxNumber = generators.Max(g => g.Order); // A função Max pega o maior valor de Order
+
+            // Garantir que 'maxNumber' foi encontrado antes de usá-lo
+            int newOrder = maxNumber + 1; // Incrementa para o novo gerador
+
+
 
             foreach (var gen in generators)
             {
@@ -3168,36 +3181,43 @@ namespace SusteniWebServices.Controllers
 
             int nextNumber = maxNumber + 1;
             string newGeneratorName = "Gerador" + nextNumber;
-
             string newGeneratorGuid = Guid.NewGuid().ToString();
 
             // Criando o SQL para inserir um novo gerador baseado no original
-            string sql = "INSERT INTO Generators (GeneratorGuid, ShipGuid, Name, Order, FuelTypeGuid, TypeGuid, kW, " +
-                        "KgDieselkWh, EfficientMotorSwitchboard, MaintenanceCost, PowerProduction, ExcludeAutoTune) " +
-                        "VALUES (@GeneratorGuid, @ShipGuid, @Name, @Order, @FuelTypeGuid, @TypeGuid, @kW, " +
-                        "@KgDieselkWh, @EfficientMotorSwitchboard, @MaintenanceCost, @PowerProduction, @ExcludeAutoTune)";
+           string sql = @"
+                    INSERT INTO Generators (
+                        GeneratorGuid, ShipGuid, Name, [Order],
+                        FuelTypeGuid, TypeGuid, kW, KgDieselkWh, KgDieselkWh2,
+                        EfficientMotorSwitchboard, EfficientMotorSwitchboard2,
+                        MaintenanceCost, MaintenanceCost2,
+                        FuelPrice, FuelPrice2,
+                        PowerProduction, ExcludeAutoTune, ShutdownPriority
+                    )
+                    SELECT
+                        @NewGeneratorGuid, ShipGuid, @Name, @Order,
+                        FuelTypeGuid, TypeGuid, kW, KgDieselkWh, KgDieselkWh2,
+                        EfficientMotorSwitchboard, EfficientMotorSwitchboard2,
+                        MaintenanceCost, MaintenanceCost2,
+                        FuelPrice, FuelPrice2,
+                        PowerProduction, ExcludeAutoTune, ShutdownPriority
+                    FROM Generators
+                    WHERE GeneratorGuid = @OriginalGeneratorGuid";
+
+                    
+
+
 
             using (SqlConnection cnn = new SqlConnection(conString))
             {
                 cnn.Open();
                 using (SqlCommand cmd = new SqlCommand(sql, cnn))
                 {
-                    cmd.Parameters.Add("@GeneratorGuid", SqlDbType.NVarChar, 80).Value = newGeneratorGuid.ToString();
-                    cmd.Parameters.Add("@ShipGuid", SqlDbType.NVarChar, 80).Value = originalGenerator.ShipGuid;
+                    cmd.Parameters.Add("@NewGeneratorGuid", SqlDbType.NVarChar, 80).Value = newGeneratorGuid;
                     cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 200).Value = newGeneratorName;
                     cmd.Parameters.Add("@Order", SqlDbType.SmallInt).Value = originalGenerator.Order;
+                    cmd.Parameters.Add("@OriginalGeneratorGuid", SqlDbType.NVarChar, 80).Value = GeneratorGuid;
 
-                    cmd.Parameters.Add("@TypeGuid", SqlDbType.NVarChar, 80).Value =
-                        string.IsNullOrWhiteSpace(originalGenerator.TypeGuid) ? (object)DBNull.Value : originalGenerator.TypeGuid;
 
-                    cmd.Parameters.Add("@FuelTypeGuid", SqlDbType.NVarChar, 80).Value =
-                        string.IsNullOrWhiteSpace(originalGenerator.FuelTypeGuid) ? (object)DBNull.Value : originalGenerator.FuelTypeGuid;
-
-                    cmd.Parameters.Add("@kW", SqlDbType.Int).Value = originalGenerator.kW;
-                    cmd.Parameters.Add("@KgDieselkWh", SqlDbType.Float).Value = originalGenerator.KgDieselkWh;
-                    cmd.Parameters.Add("@EfficientMotorSwitchboard", SqlDbType.Float).Value = originalGenerator.EfficientMotorSwitchboard;
-                    cmd.Parameters.Add("@PowerProduction", SqlDbType.Bit).Value = originalGenerator.PowerProduction;
-                    cmd.Parameters.Add("@ExcludeAutoTune", SqlDbType.Bit).Value = originalGenerator.ExcludeAutoTune;
 
                     try
                     {
@@ -6101,7 +6121,8 @@ namespace SusteniWebServices.Controllers
         {
             try
             {
-                var connectionString = $"Server={request.logonInfo.Server};Database={request.logonInfo.Database};Trusted_Connection=True;";
+                var connectionString = $"Server={request.logonInfo.Server};Database={request.logonInfo.Database};Integrated Security=True;TrustServerCertificate=True;";
+
 
                 using (var connection = new SqlConnection(connectionString))
                 {
