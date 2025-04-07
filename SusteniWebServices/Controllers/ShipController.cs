@@ -232,8 +232,8 @@ public class ShipGeneratorItem
     public double FuelPrice { get; set; } = 0;
     public bool PowerProduction { get; set; } = true;
     public bool ExcludeAutoTune { get; set; } = false;
-    public int EffectBefore { get; set; } = 0;
-    public int EffectAfter { get; set; } = 0;
+    public double EffectBefore { get; set; } = 0;
+    public double EffectAfter { get; set; } = 0;
     public double Faktor { get; set; } = 0;
     public double FuelBefore { get; set; } = 0;
     public double FuelAfter { get; set; } = 0;
@@ -256,6 +256,8 @@ public class ShipGeneratorItem
         public string FuelType { get; set; }
         public decimal Price { get; set; }
     }
+
+    
 
     public class FuelPriceSaveRequest
     {
@@ -563,6 +565,7 @@ namespace SusteniWebServices.Controllers
 
                     foreach (var generator in generators)
                     {
+                        Console.WriteLine($"EffectBefore: {generator.EffectBefore}, EffectAfter: {generator.EffectAfter}");
                         // Gera novo GUID para evitar sobrescrever dados
                         Guid newGeneratorGuid = Guid.NewGuid();
                         generator.GeneratorGuid = newGeneratorGuid.ToString();
@@ -641,9 +644,13 @@ namespace SusteniWebServices.Controllers
 
                         string sql = @"
                             INSERT INTO Generators 
-                            (GeneratorGuid, ShipGuid, Name, kW, KgDieselkWh, FuelTypeGuid, MaintenanceCost, FuelPrice, PowerProduction, [Order])
+                            (GeneratorGuid, ShipGuid, Name, kW, KgDieselkWh, FuelTypeGuid, MaintenanceCost, FuelPrice, PowerProduction, [Order], 
+                            EfficientMotorSwitchboard, ExcludeAutoTune)
                             VALUES 
-                            (@GeneratorGuid, @ShipGuid, @Name, @kW, @KgDieselkWh, @FuelTypeGuid, @MaintenanceCost, @FuelPrice, @PowerProduction, @Order);";
+                            (@GeneratorGuid, @ShipGuid, @Name, @kW, @KgDieselkWh, @FuelTypeGuid, @MaintenanceCost, @FuelPrice, @PowerProduction, @Order,
+                            @EfficientMotorSwitchboard, @ExcludeAutoTune);";
+
+
 
 
 
@@ -670,6 +677,20 @@ namespace SusteniWebServices.Controllers
                             cmd.Parameters.AddWithValue("@FuelPrice", generator.FuelPrice);
                             cmd.Parameters.AddWithValue("@PowerProduction", generator.PowerProduction);
                             cmd.Parameters.AddWithValue("@Order", generator.Order);
+                            cmd.Parameters.AddWithValue("@EfficientMotorSwitchboard", generator.EfficientMotorSwitchboard);
+                            cmd.Parameters.AddWithValue("@ExcludeAutoTune", generator.ExcludeAutoTune);
+                            // cmd.Parameters.AddWithValue("@EffectBefore", generator.EffectBefore);
+                            // cmd.Parameters.AddWithValue("@EffectAfter", generator.EffectAfter);
+                            // cmd.Parameters.AddWithValue("@Faktor", generator.Faktor);
+                            // cmd.Parameters.AddWithValue("@FuelBefore", generator.FuelBefore);
+                            // cmd.Parameters.AddWithValue("@FuelAfter", generator.FuelAfter);
+                            // cmd.Parameters.AddWithValue("@CO2Before", generator.CO2Before);
+                            // cmd.Parameters.AddWithValue("@CO2After", generator.CO2After);
+                            // cmd.Parameters.AddWithValue("@NOxBefore", generator.NOxBefore);
+                            // cmd.Parameters.AddWithValue("@NOxAfter", generator.NOxAfter);
+                            // cmd.Parameters.AddWithValue("@SOxBefore", generator.SOxBefore);
+                            // cmd.Parameters.AddWithValue("@SOxAfter", generator.SOxAfter);
+                            
 
                             int rowsAffected = cmd.ExecuteNonQuery();
                             Console.WriteLine($"✅ Linhas afetadas pelo INSERT: {rowsAffected}");
@@ -2361,9 +2382,9 @@ namespace SusteniWebServices.Controllers
                         if (!rdr.IsDBNull(rdr.GetOrdinal("Order"))) item.Order = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("Order")));
                         if (!rdr.IsDBNull(rdr.GetOrdinal("kW"))) item.kW = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("kW")));
                         if (!rdr.IsDBNull(rdr.GetOrdinal("KgDieselkWh"))) item.KgDieselkWh = rdr.GetDouble(rdr.GetOrdinal("KgDieselkWh"));
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("MaintenanceCost"))) item.MaintenanceCost = Convert.ToInt32(rdr.GetDouble(rdr.GetOrdinal("MaintenanceCost")));
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectBefore"))) item.EffectBefore = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("EffectBefore")));
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectAfter"))) item.EffectAfter = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("EffectAfter")));
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("MaintenanceCost"))) item.MaintenanceCost = rdr.GetDouble(rdr.GetOrdinal("MaintenanceCost"));
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectBefore"))) item.EffectBefore = rdr.GetDouble(rdr.GetOrdinal("EffectBefore"));
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectAfter"))) item.EffectAfter = rdr.GetDouble(rdr.GetOrdinal("EffectAfter")); 
                         if (!rdr.IsDBNull(rdr.GetOrdinal("Faktor"))) item.Faktor = rdr.GetDouble(rdr.GetOrdinal("Faktor"));
                         if (!rdr.IsDBNull(rdr.GetOrdinal("FuelBefore"))) item.FuelBefore = rdr.GetDouble(rdr.GetOrdinal("FuelBefore"));
                         if (!rdr.IsDBNull(rdr.GetOrdinal("FuelAfter"))) item.FuelAfter = rdr.GetDouble(rdr.GetOrdinal("FuelAfter"));
@@ -2393,7 +2414,13 @@ namespace SusteniWebServices.Controllers
                 }
             }
 
-            return JsonConvert.SerializeObject(items);
+            return JsonConvert.SerializeObject(items, new JsonSerializerSettings
+            {
+                FloatParseHandling = FloatParseHandling.Double,
+                FloatFormatHandling = FloatFormatHandling.DefaultValue,
+                Formatting = Formatting.Indented
+            });
+
         }
 
 
@@ -2598,8 +2625,8 @@ namespace SusteniWebServices.Controllers
                         if (!rdr.IsDBNull(rdr.GetOrdinal("kW"))) { item.kW = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("kW"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("KgDieselkWh"))) { item.KgDieselkWh = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("KgDieselkWh"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("MaintenanceCost"))) { item.MaintenanceCost = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("MaintenanceCost"))); }
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectBefore"))) { item.EffectBefore = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("EffectBefore"))); }
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectAfter"))) { item.EffectAfter = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("EffectAfter"))); }
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectBefore"))) { item.EffectBefore = Convert.ToDouble(rdr.GetValue(rdr.GetOrdinal("EffectBefore"))); }
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectAfter"))) { item.EffectAfter = Convert.ToDouble(rdr.GetValue(rdr.GetOrdinal("EffectAfter"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("Faktor"))) { item.Faktor = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("Faktor"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("FuelBefore"))) { item.FuelBefore = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("FuelBefore"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("FuelAfter"))) { item.FuelAfter = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("FuelAfter"))); }
@@ -3212,6 +3239,18 @@ namespace SusteniWebServices.Controllers
                 cnn.Open();
                 using (SqlCommand cmd = new SqlCommand(sql, cnn))
                 {
+
+                    // Adicione essas linhas ANTES do try-catch e do cmd.ExecuteNonQuery()
+                    Console.WriteLine("---------- Verificando originalGenerator ----------");
+                    Console.WriteLine($"FuelTypeGuid original: {originalGenerator.FuelTypeGuid}");
+                    Console.WriteLine($"TypeGuid original: {originalGenerator.TypeGuid}");
+                    Console.WriteLine($"EfficientMotorSwitchboard original: {originalGenerator.EfficientMotorSwitchboard}");
+                    Console.WriteLine($"MaintenanceCost original: {originalGenerator.MaintenanceCost}");
+                    Console.WriteLine("----------------------------------------------------");
+
+
+
+                    
                     cmd.Parameters.Add("@NewGeneratorGuid", SqlDbType.NVarChar, 80).Value = newGeneratorGuid;
                     cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 200).Value = newGeneratorName;
                     cmd.Parameters.Add("@Order", SqlDbType.SmallInt).Value = originalGenerator.Order;
@@ -5184,8 +5223,8 @@ namespace SusteniWebServices.Controllers
                         if (!rdr.IsDBNull(rdr.GetOrdinal("kW"))) { item.kW = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("kW"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("KgDieselkWh"))) { item.KgDieselkWh = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("KgDieselkWh"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("MaintenanceCost"))) { item.MaintenanceCost = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("MaintenanceCost"))); }
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectBefore"))) { item.EffectBefore = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("EffectBefore"))); }
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectAfter"))) { item.EffectAfter = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("EffectAfter"))); }
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectBefore"))) { item.EffectBefore = Convert.ToDouble(rdr.GetValue(rdr.GetOrdinal("EffectBefore"))); }
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectAfter"))) { item.EffectAfter = Convert.ToDouble(rdr.GetValue(rdr.GetOrdinal("EffectAfter"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("Faktor"))) { item.Faktor = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("Faktor"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("FuelBefore"))) { item.FuelBefore = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("FuelBefore"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("FuelAfter"))) { item.FuelAfter = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("FuelAfter"))); }
