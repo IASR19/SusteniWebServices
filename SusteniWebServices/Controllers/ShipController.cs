@@ -221,6 +221,10 @@ public class ShipGeneratorItem
     public string ShipGuid { get; set; } = "";
     public string Name { get; set; } = "";
     public int Order { get; set; } = 0;
+    public bool IsDuplicate { get; set; }
+
+
+    
 
     public string? TypeGuid { get; set; } = "";
     public string? FuelTypeGuid { get; set; } = "";
@@ -232,8 +236,8 @@ public class ShipGeneratorItem
     public double FuelPrice { get; set; } = 0;
     public bool PowerProduction { get; set; } = true;
     public bool ExcludeAutoTune { get; set; } = false;
-    public double EffectBefore { get; set; } = 0;
-    public double EffectAfter { get; set; } = 0;
+    public int EffectBefore { get; set; } = 0;
+    public int EffectAfter { get; set; } = 0;
     public double Faktor { get; set; } = 0;
     public double FuelBefore { get; set; } = 0;
     public double FuelAfter { get; set; } = 0;
@@ -256,8 +260,6 @@ public class ShipGeneratorItem
         public string FuelType { get; set; }
         public decimal Price { get; set; }
     }
-
-    
 
     public class FuelPriceSaveRequest
     {
@@ -565,26 +567,60 @@ namespace SusteniWebServices.Controllers
 
                     foreach (var generator in generators)
                     {
-                        Console.WriteLine($"EffectBefore: {generator.EffectBefore}, EffectAfter: {generator.EffectAfter}");
-                        // Gera novo GUID para evitar sobrescrever dados
-                        Guid newGeneratorGuid = Guid.NewGuid();
-                        generator.GeneratorGuid = newGeneratorGuid.ToString();
 
-                        // Valida apenas ShipGuid
-                        string shipGuid = generator.ShipGuid;
-                        if (string.IsNullOrWhiteSpace(shipGuid))
+                        // ⚠️ NOVA VERIFICAÇÃO
+                        if (!generator.IsDuplicate)
                         {
-                            Console.WriteLine("ShipGuid não pode estar vazio.");
-                            return BadRequest("ShipGuid não pode estar vazio.");
+                            Console.WriteLine("⚠️ Este gerador não é duplicação. Salvamento de novo item ainda não foi implementado.");
+                            return BadRequest("Esse tipo de salvamento ainda não foi tratado.");
                         }
 
 
-                        
-                        // 🔄 Sempre gera um novo GUID para evitar sobrescrever dados
-                       // newGeneratorGuid = Guid.NewGuid();
-                       // generator.GeneratorGuid = newGeneratorGuid.ToString();
+                        // Pega o GUID do item original a ser duplicado
+                        if (!Guid.TryParse(generator.GeneratorGuid, out Guid originalGuid))
+                        {
+                            Console.WriteLine("GUID original inválido.");
+                            return BadRequest("GUID original inválido.");
+                        }
 
-                        // Obtém todos os nomes existentes para esse ShipGuid
+                        // Busca o item original completo no banco
+                        ShipGeneratorItem originalItem = null;
+                        using (SqlCommand cmd = new SqlCommand("SELECT * FROM Generators WHERE GeneratorGuid = @GeneratorGuid", cnn))
+                        {
+                            cmd.Parameters.AddWithValue("@GeneratorGuid", originalGuid);
+                            using (var reader = cmd.ExecuteReader())
+                            {
+                                if (reader.Read())
+                                {
+                                    originalItem = new ShipGeneratorItem
+                                    {
+                                        GeneratorGuid = Guid.NewGuid().ToString(),
+                                        ShipGuid = reader["ShipGuid"].ToString(),
+                                        FuelTypeGuid = reader["FuelTypeGuid"] == DBNull.Value ? null : reader["FuelTypeGuid"].ToString(),
+                                        TypeGuid = reader["TypeGuid"] == DBNull.Value ? null : reader["TypeGuid"].ToString(),
+                                        Name = "", // será setado depois
+                                        kW = reader["kW"] == DBNull.Value ? 0 : (int)Math.Round(Convert.ToDouble(reader["kW"])),
+                                        KgDieselkWh = reader["KgDieselkWh"] == DBNull.Value ? 0 : Convert.ToDouble(reader["KgDieselkWh"]),
+                                        EfficientMotorSwitchboard = reader["EfficientMotorSwitchboard"] == DBNull.Value ? 0.0 : Convert.ToDouble(reader["EfficientMotorSwitchboard"]),
+                                        MaintenanceCost = reader["MaintenanceCost"] == DBNull.Value ? 0 : Convert.ToDouble(reader["MaintenanceCost"]),
+                                        FuelPrice = reader["FuelPrice"] == DBNull.Value ? 0 : Convert.ToDouble(reader["FuelPrice"]),
+                                        PowerProduction = reader["PowerProduction"] == DBNull.Value ? false : Convert.ToBoolean(reader["PowerProduction"]),
+                                        ExcludeAutoTune = reader["ExcludeAutoTune"] == DBNull.Value ? false : Convert.ToBoolean(reader["ExcludeAutoTune"]),
+                                        ShutdownPriority = reader["ShutdownPriority"] == DBNull.Value ? null : (int?)Convert.ToInt32(reader["ShutdownPriority"])
+                                    };
+                                }
+                            }
+                        }
+
+                        if (originalItem == null)
+                        {
+                            Console.WriteLine("Gerador original não encontrado.");
+                            return BadRequest("Gerador original não encontrado.");
+                        }
+
+                        string shipGuid = originalItem.ShipGuid;
+
+                        // Gera nome incremental
                         List<string> existingNames = new List<string>();
                         using (SqlCommand cmdNames = new SqlCommand("SELECT Name FROM Generators WHERE ShipGuid = @ShipGuid", cnn))
                         {
@@ -598,10 +634,7 @@ namespace SusteniWebServices.Controllers
                             }
                         }
 
-                        // Extrai o prefixo do nome base (ex: "Boiler", "Generator")
                         string baseName = new string(generator.Name.TakeWhile(c => !char.IsDigit(c)).ToArray()).Trim();
-
-                        // Encontra o maior número existente com esse prefixo
                         int maxIndex = existingNames
                             .Where(name => name.StartsWith(baseName))
                             .Select(name =>
@@ -612,12 +645,9 @@ namespace SusteniWebServices.Controllers
                             .DefaultIfEmpty(0)
                             .Max();
 
-                        generator.Name = $"{baseName} {maxIndex + 1}";
+                        originalItem.Name = $"{baseName} {maxIndex + 1}";
 
-                        Console.WriteLine($"🔄 Novo GUID gerado para duplicação: {generator.GeneratorGuid}");
-                        Console.WriteLine($"🆕 Novo nome gerador duplicado: {generator.Name}");
-
-                        // 🧠 Buscar o próximo Order disponível
+                        // Gera nova ordem
                         int newOrder = 1;
                         using (SqlCommand cmdOrder = new SqlCommand("SELECT ISNULL(MAX([Order]), 0) + 1 FROM Generators WHERE ShipGuid = @ShipGuid", cnn))
                         {
@@ -627,70 +657,56 @@ namespace SusteniWebServices.Controllers
                                 newOrder = Convert.ToInt32(result);
                         }
 
-                        generator.Order = newOrder;
+                        originalItem.Order = newOrder;
 
                         Console.WriteLine("🚨 DUMP DOS VALORES ANTES DO INSERT:");
-                        Console.WriteLine($"GeneratorGuid: {newGeneratorGuid}");
-                        Console.WriteLine($"ShipGuid: {generator.ShipGuid}");
-                        Console.WriteLine($"Name: {generator.Name}");
-                        Console.WriteLine($"kW: {generator.kW}");
-                        Console.WriteLine($"KgDieselkWh: {generator.KgDieselkWh}");
-                        Console.WriteLine($"FuelTypeGuid: {generator.FuelTypeGuid}");
-                        Console.WriteLine($"MaintenanceCost: {generator.MaintenanceCost}");
-                        Console.WriteLine($"FuelPrice: {generator.FuelPrice}");
-                        Console.WriteLine($"PowerProduction: {generator.PowerProduction}");
-                        Console.WriteLine($"Order: {generator.Order}");
-
+                        Console.WriteLine($"GeneratorGuid: {originalItem.GeneratorGuid}");
+                        Console.WriteLine($"ShipGuid: {originalItem.ShipGuid}");
+                        Console.WriteLine($"Name: {originalItem.Name}");
+                        Console.WriteLine($"kW: {originalItem.kW}");
+                        Console.WriteLine($"KgDieselkWh: {originalItem.KgDieselkWh}");
+                        Console.WriteLine($"FuelTypeGuid: {originalItem.FuelTypeGuid}");
+                        Console.WriteLine($"TypeGuid: {originalItem.TypeGuid}");
+                        Console.WriteLine($"MaintenanceCost: {originalItem.MaintenanceCost}");
+                        Console.WriteLine($"FuelPrice: {originalItem.FuelPrice}");
+                        Console.WriteLine($"PowerProduction: {originalItem.PowerProduction}");
+                        Console.WriteLine($"Order: {originalItem.Order}");
+                        Console.WriteLine($"ExcludeAutoTune: {originalItem.ExcludeAutoTune}");
+                        Console.WriteLine($"ShutdownPriority: {originalItem.ShutdownPriority}");
 
                         string sql = @"
                             INSERT INTO Generators 
-                            (GeneratorGuid, ShipGuid, Name, kW, KgDieselkWh, FuelTypeGuid, MaintenanceCost, FuelPrice, PowerProduction, [Order], 
-                            EfficientMotorSwitchboard, ExcludeAutoTune)
+                            (GeneratorGuid, ShipGuid, Name, FuelTypeGuid, TypeGuid, kW, KgDieselkWh, EfficientMotorSwitchboard, MaintenanceCost, FuelPrice, PowerProduction, [Order], ExcludeAutoTune, ShutdownPriority)
                             VALUES 
-                            (@GeneratorGuid, @ShipGuid, @Name, @kW, @KgDieselkWh, @FuelTypeGuid, @MaintenanceCost, @FuelPrice, @PowerProduction, @Order,
-                            @EfficientMotorSwitchboard, @ExcludeAutoTune);";
-
-
-
-
+                            (@GeneratorGuid, @ShipGuid, @Name, @FuelTypeGuid, @TypeGuid, @kW, @KgDieselkWh, @EfficientMotorSwitchboard, @MaintenanceCost, @FuelPrice, @PowerProduction, @Order, @ExcludeAutoTune, @ShutdownPriority);";
 
                         using (SqlCommand cmd = new SqlCommand(sql, cnn))
                         {
-                            cmd.Parameters.Add("@GeneratorGuid", SqlDbType.UniqueIdentifier).Value = newGeneratorGuid;
-                            cmd.Parameters.Add("@ShipGuid", SqlDbType.NVarChar, 80).Value = shipGuid;
-                            cmd.Parameters.AddWithValue("@Name", generator.Name);
-                            cmd.Parameters.AddWithValue("@kW", generator.kW);
-                            cmd.Parameters.AddWithValue("@KgDieselkWh", generator.KgDieselkWh);
-                            if (Guid.TryParse(generator.FuelTypeGuid, out Guid fuelTypeGuid))
-                            {
+                            cmd.Parameters.Add("@GeneratorGuid", SqlDbType.UniqueIdentifier).Value = new Guid(originalItem.GeneratorGuid);
+                            cmd.Parameters.Add("@ShipGuid", SqlDbType.NVarChar, 80).Value = originalItem.ShipGuid;
+                            cmd.Parameters.AddWithValue("@Name", originalItem.Name);
+
+                            // FuelTypeGuid
+                            if (Guid.TryParse(originalItem.FuelTypeGuid, out Guid fuelTypeGuid))
                                 cmd.Parameters.Add("@FuelTypeGuid", SqlDbType.UniqueIdentifier).Value = fuelTypeGuid;
-                            }
                             else
-                            {
                                 cmd.Parameters.Add("@FuelTypeGuid", SqlDbType.UniqueIdentifier).Value = DBNull.Value;
-                            }
 
+                            // TypeGuid
+                            if (Guid.TryParse(originalItem.TypeGuid, out Guid typeGuid))
+                                cmd.Parameters.Add("@TypeGuid", SqlDbType.UniqueIdentifier).Value = typeGuid;
+                            else
+                                cmd.Parameters.Add("@TypeGuid", SqlDbType.UniqueIdentifier).Value = DBNull.Value;
 
-
-
-                            cmd.Parameters.AddWithValue("@MaintenanceCost", generator.MaintenanceCost);
-                            cmd.Parameters.AddWithValue("@FuelPrice", generator.FuelPrice);
-                            cmd.Parameters.AddWithValue("@PowerProduction", generator.PowerProduction);
-                            cmd.Parameters.AddWithValue("@Order", generator.Order);
-                            cmd.Parameters.AddWithValue("@EfficientMotorSwitchboard", generator.EfficientMotorSwitchboard);
-                            cmd.Parameters.AddWithValue("@ExcludeAutoTune", generator.ExcludeAutoTune);
-                            // cmd.Parameters.AddWithValue("@EffectBefore", generator.EffectBefore);
-                            // cmd.Parameters.AddWithValue("@EffectAfter", generator.EffectAfter);
-                            // cmd.Parameters.AddWithValue("@Faktor", generator.Faktor);
-                            // cmd.Parameters.AddWithValue("@FuelBefore", generator.FuelBefore);
-                            // cmd.Parameters.AddWithValue("@FuelAfter", generator.FuelAfter);
-                            // cmd.Parameters.AddWithValue("@CO2Before", generator.CO2Before);
-                            // cmd.Parameters.AddWithValue("@CO2After", generator.CO2After);
-                            // cmd.Parameters.AddWithValue("@NOxBefore", generator.NOxBefore);
-                            // cmd.Parameters.AddWithValue("@NOxAfter", generator.NOxAfter);
-                            // cmd.Parameters.AddWithValue("@SOxBefore", generator.SOxBefore);
-                            // cmd.Parameters.AddWithValue("@SOxAfter", generator.SOxAfter);
-                            
+                            cmd.Parameters.AddWithValue("@kW", originalItem.kW);
+                            cmd.Parameters.AddWithValue("@KgDieselkWh", originalItem.KgDieselkWh);
+                            cmd.Parameters.AddWithValue("@EfficientMotorSwitchboard", (object?)originalItem.EfficientMotorSwitchboard ?? DBNull.Value);
+                            cmd.Parameters.AddWithValue("@MaintenanceCost", originalItem.MaintenanceCost);
+                            cmd.Parameters.AddWithValue("@FuelPrice", originalItem.FuelPrice);
+                            cmd.Parameters.AddWithValue("@PowerProduction", originalItem.PowerProduction);
+                            cmd.Parameters.AddWithValue("@Order", originalItem.Order);
+                            cmd.Parameters.AddWithValue("@ExcludeAutoTune", originalItem.ExcludeAutoTune);
+                            cmd.Parameters.AddWithValue("@ShutdownPriority", (object?)originalItem.ShutdownPriority ?? DBNull.Value);
 
                             int rowsAffected = cmd.ExecuteNonQuery();
                             Console.WriteLine($"✅ Linhas afetadas pelo INSERT: {rowsAffected}");
@@ -2382,9 +2398,9 @@ namespace SusteniWebServices.Controllers
                         if (!rdr.IsDBNull(rdr.GetOrdinal("Order"))) item.Order = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("Order")));
                         if (!rdr.IsDBNull(rdr.GetOrdinal("kW"))) item.kW = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("kW")));
                         if (!rdr.IsDBNull(rdr.GetOrdinal("KgDieselkWh"))) item.KgDieselkWh = rdr.GetDouble(rdr.GetOrdinal("KgDieselkWh"));
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("MaintenanceCost"))) item.MaintenanceCost = rdr.GetDouble(rdr.GetOrdinal("MaintenanceCost"));
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectBefore"))) item.EffectBefore = rdr.GetDouble(rdr.GetOrdinal("EffectBefore"));
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectAfter"))) item.EffectAfter = rdr.GetDouble(rdr.GetOrdinal("EffectAfter")); 
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("MaintenanceCost"))) item.MaintenanceCost = Convert.ToInt32(rdr.GetDouble(rdr.GetOrdinal("MaintenanceCost")));
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectBefore"))) item.EffectBefore = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("EffectBefore")));
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectAfter"))) item.EffectAfter = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("EffectAfter")));
                         if (!rdr.IsDBNull(rdr.GetOrdinal("Faktor"))) item.Faktor = rdr.GetDouble(rdr.GetOrdinal("Faktor"));
                         if (!rdr.IsDBNull(rdr.GetOrdinal("FuelBefore"))) item.FuelBefore = rdr.GetDouble(rdr.GetOrdinal("FuelBefore"));
                         if (!rdr.IsDBNull(rdr.GetOrdinal("FuelAfter"))) item.FuelAfter = rdr.GetDouble(rdr.GetOrdinal("FuelAfter"));
@@ -2414,13 +2430,7 @@ namespace SusteniWebServices.Controllers
                 }
             }
 
-            return JsonConvert.SerializeObject(items, new JsonSerializerSettings
-            {
-                FloatParseHandling = FloatParseHandling.Double,
-                FloatFormatHandling = FloatFormatHandling.DefaultValue,
-                Formatting = Formatting.Indented
-            });
-
+            return JsonConvert.SerializeObject(items);
         }
 
 
@@ -2625,8 +2635,8 @@ namespace SusteniWebServices.Controllers
                         if (!rdr.IsDBNull(rdr.GetOrdinal("kW"))) { item.kW = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("kW"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("KgDieselkWh"))) { item.KgDieselkWh = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("KgDieselkWh"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("MaintenanceCost"))) { item.MaintenanceCost = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("MaintenanceCost"))); }
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectBefore"))) { item.EffectBefore = Convert.ToDouble(rdr.GetValue(rdr.GetOrdinal("EffectBefore"))); }
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectAfter"))) { item.EffectAfter = Convert.ToDouble(rdr.GetValue(rdr.GetOrdinal("EffectAfter"))); }
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectBefore"))) { item.EffectBefore = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("EffectBefore"))); }
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectAfter"))) { item.EffectAfter = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("EffectAfter"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("Faktor"))) { item.Faktor = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("Faktor"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("FuelBefore"))) { item.FuelBefore = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("FuelBefore"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("FuelAfter"))) { item.FuelAfter = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("FuelAfter"))); }
@@ -3239,18 +3249,6 @@ namespace SusteniWebServices.Controllers
                 cnn.Open();
                 using (SqlCommand cmd = new SqlCommand(sql, cnn))
                 {
-
-                    // Adicione essas linhas ANTES do try-catch e do cmd.ExecuteNonQuery()
-                    Console.WriteLine("---------- Verificando originalGenerator ----------");
-                    Console.WriteLine($"FuelTypeGuid original: {originalGenerator.FuelTypeGuid}");
-                    Console.WriteLine($"TypeGuid original: {originalGenerator.TypeGuid}");
-                    Console.WriteLine($"EfficientMotorSwitchboard original: {originalGenerator.EfficientMotorSwitchboard}");
-                    Console.WriteLine($"MaintenanceCost original: {originalGenerator.MaintenanceCost}");
-                    Console.WriteLine("----------------------------------------------------");
-
-
-
-                    
                     cmd.Parameters.Add("@NewGeneratorGuid", SqlDbType.NVarChar, 80).Value = newGeneratorGuid;
                     cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 200).Value = newGeneratorName;
                     cmd.Parameters.Add("@Order", SqlDbType.SmallInt).Value = originalGenerator.Order;
@@ -5223,8 +5221,8 @@ namespace SusteniWebServices.Controllers
                         if (!rdr.IsDBNull(rdr.GetOrdinal("kW"))) { item.kW = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("kW"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("KgDieselkWh"))) { item.KgDieselkWh = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("KgDieselkWh"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("MaintenanceCost"))) { item.MaintenanceCost = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("MaintenanceCost"))); }
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectBefore"))) { item.EffectBefore = Convert.ToDouble(rdr.GetValue(rdr.GetOrdinal("EffectBefore"))); }
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectAfter"))) { item.EffectAfter = Convert.ToDouble(rdr.GetValue(rdr.GetOrdinal("EffectAfter"))); }
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectBefore"))) { item.EffectBefore = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("EffectBefore"))); }
+                        if (!rdr.IsDBNull(rdr.GetOrdinal("EffectAfter"))) { item.EffectAfter = Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("EffectAfter"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("Faktor"))) { item.Faktor = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("Faktor"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("FuelBefore"))) { item.FuelBefore = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("FuelBefore"))); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("FuelAfter"))) { item.FuelAfter = Convert.ToSingle(rdr.GetValue(rdr.GetOrdinal("FuelAfter"))); }
