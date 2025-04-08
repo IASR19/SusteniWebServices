@@ -136,6 +136,23 @@ public class ShipFuelTypeItem
     public Single Cf { get; set; } = 0;
 }
 
+public class FuelPricePerGeneratorSaveRequest
+{
+    public AccountLogOnInfoItem logonInfo { get; set; }
+    public List<FuelPriceGeneratorItem> Data { get; set; }
+}
+
+public class FuelPriceGeneratorItem
+{
+    public Guid GeneratorGuid { get; set; }
+    public Guid FuelTypeGuid { get; set; }
+    public decimal Price { get; set; }
+    public Guid ShipGuid { get; set; } // Adicionei o ShipGuid
+}
+
+
+
+
 public class ShipOperationModeItem
 {
     public string OperationModeGuid { get; set; } = "";
@@ -150,6 +167,9 @@ public class ShipOperationModeItem
     public AccountLogOnInfoItem logonInfo { get; set; } = new AccountLogOnInfoItem();
 
 }
+
+
+
 
 public class ShipEquipmentTypeItem
 {
@@ -378,6 +398,15 @@ public class ShipOperationPowerItem
     public AccountLogOnInfoItem logonInfo { get; set; } = new AccountLogOnInfoItem();
 
 }
+
+public class FuelPriceByGeneratorItem
+{
+    public Guid GeneratorGuid { get; set; }
+    public Guid FuelTypeGuid { get; set; }
+    public decimal Price { get; set; }
+}
+
+
 
 public class ShipOperationSavingPowerItem
 {
@@ -731,6 +760,8 @@ namespace SusteniWebServices.Controllers
                 return StatusCode(500, new { error = "Erro ao salvar os geradores.", details = ex.Message });
             }
         }
+
+        
 
 
 
@@ -6206,6 +6237,117 @@ namespace SusteniWebServices.Controllers
                 return BadRequest(new { error = "Error saving fuel prices.", details = ex.Message });
             }
         }
+
+
+        [HttpGet]
+        [Route("GetFuelPricesByGenerator")]
+        public IActionResult GetFuelPricesByGenerator(Guid generatorId)
+        {
+            try
+            {
+                using (SqlConnection cnn = new SqlConnection(@"Server=localhost;
+                    Database=Susteni;
+                    Integrated Security=True;
+                    TrustServerCertificate=True;
+                    Encrypt=False;"))
+                {
+                    cnn.Open();
+
+                    string query = @"
+                        SELECT FuelPriceGuid, ShipGuid, FuelType, Price, GeneratorGuid
+                        FROM FuelPrices
+                        WHERE GeneratorGuid = @GeneratorGuid";
+
+                    using (SqlCommand cmd = new SqlCommand(query, cnn))
+                    {
+                        cmd.Parameters.AddWithValue("@GeneratorGuid", generatorId);
+
+                        var list = new List<object>();
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                list.Add(new
+                                {
+                                    FuelPriceGuid = reader.GetGuid(0),
+                                    ShipGuid = reader.GetGuid(1),
+                                    FuelType = reader.GetString(2),
+                                    Price = reader.GetDecimal(3),
+                                    GeneratorGuid = reader.GetGuid(4)
+                                });
+                            }
+                        }
+
+                        return Ok(list);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Erro ao buscar preços de combustível do gerador: " + ex.Message);
+                return StatusCode(500, "Erro ao buscar preços de combustível do gerador");
+            }
+        }
+
+
+
+        [HttpPost("SaveFuelPricesByGenerator")]
+        public IActionResult SaveFuelPricesByGenerator([FromBody] FuelPricePerGeneratorSaveRequest request)
+        {
+            try
+            {
+                var conString = $"server={request.logonInfo.Server};database={request.logonInfo.Database};Integrated Security=True;TrustServerCertificate=True";
+
+                using (SqlConnection cnn = new SqlConnection(conString))
+                {
+                    cnn.Open();
+
+                    foreach (var item in request.Data)
+                    {
+                        // Certifique-se de que o ShipGuid é fornecido corretamente
+                        string sql = @"
+                            IF EXISTS (
+                                SELECT 1 FROM FuelPrices 
+                                WHERE GeneratorGuid = @GeneratorGuid AND FuelType = @FuelType
+                            )
+                            BEGIN
+                                UPDATE FuelPrices 
+                                SET Price = @Price 
+                                WHERE GeneratorGuid = @GeneratorGuid AND FuelType = @FuelType
+                            END
+                            ELSE
+                            BEGIN
+                                INSERT INTO FuelPrices (ShipGuid, GeneratorGuid, FuelType, Price)
+                                VALUES (@ShipGuid, @GeneratorGuid, @FuelType, @Price)
+                            END";
+
+                        using (SqlCommand cmd = new SqlCommand(sql, cnn))
+                        {
+                            // Associando os parâmetros corretamente
+                            cmd.Parameters.AddWithValue("@GeneratorGuid", item.GeneratorGuid);
+                            cmd.Parameters.AddWithValue("@FuelType", item.FuelTypeGuid);
+                            cmd.Parameters.AddWithValue("@Price", item.Price);
+                            cmd.Parameters.AddWithValue("@ShipGuid", item.ShipGuid); // Certifique-se de passar o ShipGuid aqui
+
+                            cmd.ExecuteNonQuery(); // Executando o comando
+                        }
+                    }
+                }
+
+                return Ok(new { message = "✅ Preços de combustível por gerador salvos com sucesso!" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = "❌ Erro ao salvar os preços.", details = ex.Message });
+            }
+        }
+
+
+
+        
+
+
+
 
 
         #endregion
