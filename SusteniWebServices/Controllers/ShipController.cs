@@ -659,6 +659,12 @@ namespace SusteniWebServices.Controllers
 
                         originalItem.Order = newOrder;
 
+                        // Se TypeGuid veio como "G" ou "H", converte pro GUID correspondente
+                        if (originalItem.TypeGuid == "G")
+                            originalItem.TypeGuid = "G"; // GUID do Generator
+                        else if (originalItem.TypeGuid == "H")
+                            originalItem.TypeGuid = "H"; // GUID do Boiler
+
                         Console.WriteLine("🚨 DUMP DOS VALORES ANTES DO INSERT:");
                         Console.WriteLine($"GeneratorGuid: {originalItem.GeneratorGuid}");
                         Console.WriteLine($"ShipGuid: {originalItem.ShipGuid}");
@@ -673,6 +679,8 @@ namespace SusteniWebServices.Controllers
                         Console.WriteLine($"Order: {originalItem.Order}");
                         Console.WriteLine($"ExcludeAutoTune: {originalItem.ExcludeAutoTune}");
                         Console.WriteLine($"ShutdownPriority: {originalItem.ShutdownPriority}");
+
+                        
 
                         string sql = @"
                             INSERT INTO Generators 
