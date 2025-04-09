@@ -30,6 +30,16 @@ public class GeneratorRequest
     public string GeneratorGuid { get; set; }
 }
 
+public class FuelPriceDeleteRequest
+{
+    public string Server { get; set; }
+    public string Database { get; set; }
+    public Guid GeneratorGuid { get; set; }
+    public Guid FuelTypeGuid { get; set; }
+}
+
+
+
 
 public class ShipItem
 {
@@ -6341,6 +6351,41 @@ namespace SusteniWebServices.Controllers
                 return BadRequest(new { error = "❌ Erro ao salvar os preços.", details = ex.Message });
             }
         }
+
+
+        [HttpPost("DeleteFuelPriceByGenerator")]
+        public IActionResult DeleteFuelPriceByGenerator([FromBody] FuelPriceDeleteRequest request)
+        {
+            try
+            {
+                var conString = $"server={request.Server};database={request.Database};Integrated Security=True;TrustServerCertificate=True";
+
+                using (SqlConnection cnn = new SqlConnection(conString))
+                {
+                    cnn.Open();
+
+                    string sql = @"
+                        DELETE FROM FuelPrices
+                        WHERE GeneratorGuid = @GeneratorGuid AND FuelType = @FuelTypeGuid";
+
+                    using (SqlCommand cmd = new SqlCommand(sql, cnn))
+                    {
+                        cmd.Parameters.AddWithValue("@GeneratorGuid", request.GeneratorGuid);
+                        cmd.Parameters.AddWithValue("@FuelTypeGuid", request.FuelTypeGuid);
+
+                        int affected = cmd.ExecuteNonQuery();
+                        return Ok(new { success = true, deleted = affected });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Erro ao deletar preço de combustível: " + ex.Message);
+                return StatusCode(500, new { error = "Erro ao deletar o preço de combustível.", details = ex.Message });
+            }
+        }
+
+        
 
 
 
