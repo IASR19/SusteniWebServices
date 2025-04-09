@@ -6242,52 +6242,52 @@ namespace SusteniWebServices.Controllers
         [HttpGet]
         [Route("GetFuelPricesByGenerator")]
         public IActionResult GetFuelPricesByGenerator(Guid generatorId)
+    {
+        try
         {
-            try
+            using (SqlConnection cnn = new SqlConnection(@"Server=localhost;
+                Database=Susteni;
+                Integrated Security=True;
+                TrustServerCertificate=True;
+                Encrypt=False;"))
             {
-                using (SqlConnection cnn = new SqlConnection(@"Server=localhost;
-                    Database=Susteni;
-                    Integrated Security=True;
-                    TrustServerCertificate=True;
-                    Encrypt=False;"))
+                cnn.Open();
+
+                string query = @"
+                    SELECT FuelPriceGuid, ShipGuid, FuelType, Price, GeneratorGuid
+                    FROM FuelPrices
+                    WHERE GeneratorGuid = @GeneratorGuid";
+
+                using (SqlCommand cmd = new SqlCommand(query, cnn))
                 {
-                    cnn.Open();
+                    cmd.Parameters.AddWithValue("@GeneratorGuid", generatorId);
 
-                    string query = @"
-                        SELECT FuelPriceGuid, ShipGuid, FuelType, Price, GeneratorGuid
-                        FROM FuelPrices
-                        WHERE GeneratorGuid = @GeneratorGuid";
-
-                    using (SqlCommand cmd = new SqlCommand(query, cnn))
+                    var list = new List<object>();
+                    using (var reader = cmd.ExecuteReader())
                     {
-                        cmd.Parameters.AddWithValue("@GeneratorGuid", generatorId);
-
-                        var list = new List<object>();
-                        using (var reader = cmd.ExecuteReader())
+                        while (reader.Read())
                         {
-                            while (reader.Read())
+                            list.Add(new
                             {
-                                list.Add(new
-                                {
-                                    FuelPriceGuid = reader.GetGuid(0),
-                                    ShipGuid = reader.GetGuid(1),
-                                    FuelType = reader.GetString(2),
-                                    Price = reader.GetDecimal(3),
-                                    GeneratorGuid = reader.GetGuid(4)
-                                });
-                            }
+                                FuelPriceGuid = reader.GetGuid(0),
+                                ShipGuid = reader.GetGuid(1),
+                                FuelType = reader.GetString(2),
+                                Price = reader.GetDecimal(3),
+                                GeneratorGuid = reader.GetGuid(4)
+                            });
                         }
-
-                        return Ok(list);
                     }
+
+                    return Ok(list);
                 }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Erro ao buscar preços de combustível do gerador: " + ex.Message);
-                return StatusCode(500, "Erro ao buscar preços de combustível do gerador");
-            }
         }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erro ao buscar preços de combustível do gerador: " + ex.Message);
+            return StatusCode(500, "Erro ao buscar preços de combustível do gerador");
+        }
+    }
 
 
 
