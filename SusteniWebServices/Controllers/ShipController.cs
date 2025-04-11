@@ -6252,52 +6252,78 @@ namespace SusteniWebServices.Controllers
         [HttpGet]
         [Route("GetFuelPricesByGenerator")]
         public IActionResult GetFuelPricesByGenerator(Guid generatorId)
-    {
-        try
         {
-            using (SqlConnection cnn = new SqlConnection(@"Server=localhost;
-                Database=Susteni;
-                Integrated Security=True;
-                TrustServerCertificate=True;
-                Encrypt=False;"))
+            try
             {
-                cnn.Open();
-
-                string query = @"
-                    SELECT FuelPriceGuid, ShipGuid, FuelType, Price, GeneratorGuid
-                    FROM FuelPrices
-                    WHERE GeneratorGuid = @GeneratorGuid";
-
-                using (SqlCommand cmd = new SqlCommand(query, cnn))
+                using (SqlConnection cnn = new SqlConnection(@"Server=localhost;
+                    Database=Susteni;
+                    Integrated Security=True;
+                    TrustServerCertificate=True;
+                    Encrypt=False;"))
                 {
-                    cmd.Parameters.AddWithValue("@GeneratorGuid", generatorId);
+                    cnn.Open();
 
-                    var list = new List<object>();
-                    using (var reader = cmd.ExecuteReader())
+                    string query = @"
+                        SELECT 
+                            fp.FuelPriceGuid,
+                            ISNULL(fp.ShipGuid, g.ShipGuid) AS ShipGuid,
+                            ISNULL(fp.FuelType, ft.FuelTypeGuid) AS FuelType,
+                            ISNULL(fp.Price, 0) AS Price,
+                            g.GeneratorGuid,
+                            1 AS IsPrimaryFuel
+                        FROM Generators g
+                        INNER JOIN FuelType ft ON g.FuelTypeGuid = ft.FuelTypeGuid
+                        LEFT JOIN FuelPrices fp 
+                            ON fp.GeneratorGuid = g.GeneratorGuid AND fp.FuelType = ft.FuelTypeGuid
+                        WHERE g.GeneratorGuid = @GeneratorGuid
+
+                        UNION
+
+                        SELECT 
+                            fp.FuelPriceGuid,
+                            fp.ShipGuid,
+                            fp.FuelType,
+                            fp.Price,
+                            fp.GeneratorGuid,
+                            0 AS IsPrimaryFuel
+                        FROM FuelPrices fp
+                        WHERE fp.GeneratorGuid = @GeneratorGuid 
+                            AND fp.FuelType <> (
+                                SELECT FuelTypeGuid FROM Generators WHERE GeneratorGuid = @GeneratorGuid
+                            )
+                    ";
+
+                    using (SqlCommand cmd = new SqlCommand(query, cnn))
                     {
-                        while (reader.Read())
-                        {
-                            list.Add(new
-                            {
-                                FuelPriceGuid = reader.GetGuid(0),
-                                ShipGuid = reader.GetGuid(1),
-                                FuelType = reader.GetString(2),
-                                Price = reader.GetDecimal(3),
-                                GeneratorGuid = reader.GetGuid(4)
-                            });
-                        }
-                    }
+                        cmd.Parameters.AddWithValue("@GeneratorGuid", generatorId);
 
-                    return Ok(list);
+                        var list = new List<object>();
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                list.Add(new
+                                {
+                                    FuelPriceGuid = reader.IsDBNull(0) ? Guid.Empty : reader.GetGuid(0),
+                                    ShipGuid = reader.GetGuid(1),
+                                    FuelType = reader.IsDBNull(2) ? Guid.Empty : Guid.Parse(reader.GetString(2)),
+                                    Price = reader.GetDecimal(3),
+                                    GeneratorGuid = reader.GetGuid(4),
+                                    IsPrimaryFuel = reader.GetInt32(5) == 1
+                                });
+                            }
+                        }
+
+                        return Ok(list);
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Erro ao buscar preços de combustível do gerador: " + ex.Message);
+                return StatusCode(500, "Erro ao buscar preços de combustível do gerador");
+            }
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Erro ao buscar preços de combustível do gerador: " + ex.Message);
-            return StatusCode(500, "Erro ao buscar preços de combustível do gerador");
-        }
-    }
 
 
 
@@ -6364,6 +6390,27 @@ namespace SusteniWebServices.Controllers
                 {
                     cnn.Open();
 
+                    // Primeiro verifica se o FuelType a ser deletado é o principal do gerador
+                    string checkQuery = @"
+                        SELECT FuelTypeGuid 
+                        FROM Generators 
+                        WHERE GeneratorGuid = @GeneratorGuid";
+
+                    using (SqlCommand checkCmd = new SqlCommand(checkQuery, cnn))
+                    {
+                        checkCmd.Parameters.AddWithValue("@GeneratorGuid", request.GeneratorGuid);
+                        var mainFuelTypeGuid = checkCmd.ExecuteScalar()?.ToString();
+
+                        if (mainFuelTypeGuid != null && mainFuelTypeGuid == request.FuelTypeGuid.ToString())
+                        {
+                            return BadRequest(new
+                            {
+                                error = "❌ Esse combustível é o principal do gerador e não pode ser excluído!"
+                            });
+                        }
+                    }
+
+                    // Se passou, pode excluir normalmente
                     string sql = @"
                         DELETE FROM FuelPrices
                         WHERE GeneratorGuid = @GeneratorGuid AND FuelType = @FuelTypeGuid";
@@ -6384,6 +6431,49 @@ namespace SusteniWebServices.Controllers
                 return StatusCode(500, new { error = "Erro ao deletar o preço de combustível.", details = ex.Message });
             }
         }
+
+
+        [HttpGet]
+        [Route("GetFuelTypeList")]
+        public IActionResult GetFuelTypeList()
+        {
+            try
+            {
+                List<object> fuelTypes = new List<object>();
+
+                using (SqlConnection cnn = new SqlConnection(@"Server=localhost;
+                    Database=Susteni;
+                    Integrated Security=True;
+                    TrustServerCertificate=True;
+                    Encrypt=False;"))
+                {
+                    cnn.Open();
+
+                    string query = "SELECT FuelTypeGuid, Name FROM FuelType";
+                    using (SqlCommand cmd = new SqlCommand(query, cnn))
+                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            fuelTypes.Add(new
+                            {
+                                FuelTypeGuid = reader["FuelTypeGuid"].ToString(),
+                                Name = reader["Name"].ToString()
+                            });
+                        }
+                    }
+                }
+
+                return Ok(fuelTypes);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Erro ao buscar tipos de combustível", details = ex.Message });
+            }
+        }
+
+
+
 
         
 
