@@ -364,8 +364,6 @@ public class ShipGeneratorModesShortItem
     public bool Active { get; set; } = false;
     public bool ActiveBefore { get; set; } = false;
     public bool ExcludeAutoTune { get; set; } = false;    
-    public int? ShutdownPriority { get; set; }
-
 }
 
 public class ShipGeneratorModesListItem
@@ -3006,7 +3004,7 @@ namespace SusteniWebServices.Controllers
         {
             string conString;
 
-            string sql = "SELECT GeneratorModesGuid, G.GeneratorGuid, OperationModeGuid, ProfilGuid, PercentLoad, PercentSaving, HoursBefore, HoursAfter, Active, ActiveBefore, G.Name, G.kW, ExcludeAutoTune, ShutdownPriority "; 
+            string sql = "SELECT GeneratorModesGuid, G.GeneratorGuid, OperationModeGuid, ProfilGuid, PercentLoad, PercentSaving, HoursBefore, HoursAfter, Active, ActiveBefore, G.Name, G.kW, ExcludeAutoTune "; 
             sql += "FROM Generators G LEFT OUTER JOIN GeneratorModes GM ON GM.GeneratorGuid = G.GeneratorGuid ";
             if (logonInfo.Parameters.fieldValue != "")
             {
@@ -3048,11 +3046,6 @@ namespace SusteniWebServices.Controllers
                         if (!rdr.IsDBNull(rdr.GetOrdinal("Active"))) { item.Active = rdr.GetBoolean(rdr.GetOrdinal("Active")); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("ActiveBefore"))) { item.ActiveBefore = rdr.GetBoolean(rdr.GetOrdinal("ActiveBefore")); }
                         if (!rdr.IsDBNull(rdr.GetOrdinal("ExcludeAutoTune"))) { item.ExcludeAutoTune = rdr.GetBoolean(rdr.GetOrdinal("ExcludeAutoTune")); }
-                        
-                        if (!rdr.IsDBNull(rdr.GetOrdinal("ShutdownPriority"))) 
-                        {
-                            item.ShutdownPriority = rdr.GetInt32(rdr.GetOrdinal("ShutdownPriority"));
-                        }
                         items.Add(item);
                     }
                 }
@@ -6479,48 +6472,9 @@ namespace SusteniWebServices.Controllers
             }
         }
 
-        
-        [Route("SetShutdownPriority")]
-        [HttpPost]
-        public async Task<ReturnValueItem> SetShutdownPriority(AccountLogOnInfoItem logonInfo, string generatorModesGuid, int priority)
-        {
-            ReturnValueItem result = new();
-
-            string conString = @"server=" + logonInfo.Server +
-                            ";User Id=" + logonInfo.UserId +
-                            ";password=" + logonInfo.Password +
-                            ";database=" + logonInfo.Database +
-                            ";TrustServerCertificate=True";
-
-            using (SqlConnection cnn = new SqlConnection(conString))
-            {
-                cnn.Open();
-                SqlCommand cmd = new SqlCommand("UPDATE GeneratorModes SET ShutdownPriority = @Priority WHERE GeneratorModesGuid = @GeneratorModesGuid", cnn);
-                cmd.Parameters.AddWithValue("@Priority", priority);
-                cmd.Parameters.AddWithValue("@GeneratorModesGuid", generatorModesGuid);
-
-                try
-                {
-                    cmd.ExecuteNonQuery();
-                    result.Success = true;
-                }
-                catch (Exception ex)
-                {
-                    result.Success = false;
-                    result.Error.Add(new ErrorItem
-                    {
-                        ErrorCode = 500,
-                        Message = ex.Message
-                    });
-                }
-            }
-
-            return result;
-        }
 
 
 
-        
         
 
 
