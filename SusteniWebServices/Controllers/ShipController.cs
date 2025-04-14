@@ -6472,6 +6472,47 @@ namespace SusteniWebServices.Controllers
             }
         }
 
+        public class ShutdownPriorityRequest
+        {
+            public Guid GeneratorModesGuid { get; set; }
+            public int ShutdownPriority { get; set; }
+            public string Server { get; set; }
+            public string Database { get; set; }
+        }
+
+
+        [HttpPost]
+        [Route("SetShutdownPriority")]
+        public IActionResult SetShutdownPriority([FromBody] ShutdownPriorityRequest request)
+        {
+            try
+            {
+                using (SqlConnection con = new SqlConnection($"Server={request.Server};Database={request.Database};Trusted_Connection=True;MultipleActiveResultSets=true"))
+                {
+                    con.Open();
+                    var cmd = new SqlCommand(@"
+                        UPDATE ShipGeneratorModesList
+                        SET ShutdownPriority = @shutdownPriority
+                        WHERE GeneratorModesGuid = @generatorModesGuid
+                    ", con);
+
+                    cmd.Parameters.AddWithValue("@shutdownPriority", request.ShutdownPriority);
+                    cmd.Parameters.AddWithValue("@generatorModesGuid", request.GeneratorModesGuid);
+
+                    cmd.ExecuteNonQuery();
+                }
+
+                return Ok(new { success = true });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
+        
+
+
 
 
 
