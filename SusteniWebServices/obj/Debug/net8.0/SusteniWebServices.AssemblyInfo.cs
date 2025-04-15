@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SusteniWebServices")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e7d4f538050c52cadf3fd865ae7b19c94f2f1e31")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+51dde3bdcf1969bca3de5375ef5511efc33e89ae")]
 [assembly: System.Reflection.AssemblyProductAttribute("SusteniWebServices")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SusteniWebServices")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

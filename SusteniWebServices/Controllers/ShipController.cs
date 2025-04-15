@@ -645,7 +645,8 @@ namespace SusteniWebServices.Controllers
                                         FuelPrice = reader["FuelPrice"] == DBNull.Value ? 0 : Convert.ToDouble(reader["FuelPrice"]),
                                         PowerProduction = reader["PowerProduction"] == DBNull.Value ? false : Convert.ToBoolean(reader["PowerProduction"]),
                                         ExcludeAutoTune = reader["ExcludeAutoTune"] == DBNull.Value ? false : Convert.ToBoolean(reader["ExcludeAutoTune"]),
-                                        ShutdownPriority = reader["ShutdownPriority"] == DBNull.Value ? null : (int?)Convert.ToInt32(reader["ShutdownPriority"])
+                                        ShutdownPriority = generator.ShutdownPriority ?? (reader["ShutdownPriority"] == DBNull.Value ? null : (int?)Convert.ToInt32(reader["ShutdownPriority"]))
+
                                     };
                                 }
                             }
@@ -6474,12 +6475,11 @@ namespace SusteniWebServices.Controllers
 
         public class ShutdownPriorityRequest
         {
-            public Guid GeneratorModesGuid { get; set; }
+            public Guid GeneratorModesGuid { get; set; } // <- Agora sim!
             public int ShutdownPriority { get; set; }
             public string Server { get; set; }
             public string Database { get; set; }
         }
-
 
         [HttpPost]
         [Route("SetShutdownPriority")]
@@ -6487,11 +6487,11 @@ namespace SusteniWebServices.Controllers
         {
             try
             {
-                using (SqlConnection con = new SqlConnection($"Server={request.Server};Database={request.Database};Trusted_Connection=True;MultipleActiveResultSets=true"))
+                using (SqlConnection con = new SqlConnection($"Server={request.Server};Database={request.Database};Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True"))
                 {
                     con.Open();
                     var cmd = new SqlCommand(@"
-                        UPDATE ShipGeneratorModesList
+                        UPDATE GeneratorModes
                         SET ShutdownPriority = @shutdownPriority
                         WHERE GeneratorModesGuid = @generatorModesGuid
                     ", con);
@@ -6509,6 +6509,7 @@ namespace SusteniWebServices.Controllers
                 return BadRequest(new { success = false, message = ex.Message });
             }
         }
+
 
         
 
