@@ -63,7 +63,29 @@ public class ParametersItem
     public string? fieldValue { get; set; } = "";
     public int numbers { get; set; } = 100;
     public bool yesno { get; set; } = false;
+    public string? startDate { get; set; }
+    public string? endDate { get; set; }
+    public int analysisDays { get; set; } = 365; // 👈 ADICIONA ISSO AQUI
+
+    public List<string?> GetAllValues()
+    {
+        return new List<string?>()
+        {
+            filter,
+            order,
+            field,
+            fieldValue,
+            startDate,
+            endDate,
+            numbers.ToString(),
+            yesno.ToString(),
+            analysisDays.ToString()
+        };
+    }
+
+
 }
+
 
 public class CustomerUserItem
 {

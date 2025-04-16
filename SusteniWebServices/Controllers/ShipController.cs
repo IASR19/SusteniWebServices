@@ -5004,7 +5004,11 @@ namespace SusteniWebServices.Controllers
                             item.MaintenaceCost += fsItem.MaintenanceCost;
                         }
 
-                        item.SavingsYear = item.FuelSaving * 1000 * item.OilPrice * ((item.Effect - item.Savings) * 100 / item.Total) / 100;
+                        double diasAnalise = logonInfo.Parameters.analysisDays > 0 ? logonInfo.Parameters.analysisDays : 365;
+                        double fatorProporcao = diasAnalise / 365.0;
+
+                        item.SavingsYear = item.FuelSaving * 1000 * item.OilPrice * ((item.Effect - item.Savings) * 100 / item.Total) / 100 * fatorProporcao;
+
 
                         items.Add(item);
                     }
@@ -5103,7 +5107,12 @@ namespace SusteniWebServices.Controllers
                             item.kWhSavings += fsItem.EffectBefore - fsItem.EffectAfter;
                         }
 
-                        item.SavingsYear = item.FuelSaving * 1000 * item.OilPrice * ((item.Effect - item.Savings) * 100 / item.Total) / 100;
+                        double diasAnalise = logonInfo.Parameters.analysisDays > 0 ? logonInfo.Parameters.analysisDays : 365;
+                        double fatorProporcao = diasAnalise / 365.0;
+
+
+                        item.SavingsYear = item.FuelSaving * 1000 * item.OilPrice * ((item.Effect - item.Savings) * 100 / item.Total) / 100 * fatorProporcao;
+
 
                         sql = "INSERT INTO tmpTable(UserGuid, [Order], Id, ProfilGuid, Profile, Name, Value, Ext) VALUES('" + logonInfo.UserId + "',1,'ListOfMesures','" + item.ProfilGuid + "','" + item.ProfilName + "','" + item.Name + "','" + item.SavingsYear.ToString().Replace(",",".") + "','" + logonInfo.Currency + "')";
                         ExecuteSQL(conString, sql);
