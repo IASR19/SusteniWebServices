@@ -3863,7 +3863,6 @@ namespace SusteniWebServices.Controllers
 
             conString = @"server=" + item.logonInfo.Server + ";User Id=" + item.logonInfo.UserId + ";password=" + item.logonInfo.Password + ";database=" + item.logonInfo.Database + ";TrustServerCertificate=True";
 
-              
             decimal loadValue = 85;
 
             item.logonInfo.Parameters.filter = "OperationModeGuid = '" + item.OperationModeGuid + "' AND ExcludeAutoTune=0 ";
@@ -5008,7 +5007,14 @@ namespace SusteniWebServices.Controllers
                         double fatorProporcao = diasAnalise / 365.0;
 
                         item.SavingsYear = item.FuelSaving * 1000 * item.OilPrice * ((item.Effect - item.Savings) * 100 / item.Total) / 100 * fatorProporcao;
-
+                        item.EffectCostYear = item.EffectCostYear * fatorProporcao;
+                        item.SavingsCostYear = item.SavingsCostYear * fatorProporcao;
+                        item.FuelSaving = item.FuelSaving * fatorProporcao;
+                        item.MaintenaceCost = item.MaintenaceCost * fatorProporcao;
+                        item.CO2Savings = item.CO2Savings * fatorProporcao;
+                        item.NOxSavings = item.NOxSavings * fatorProporcao;
+                        item.SOxSavings = item.SOxSavings * fatorProporcao;
+                        item.kWhSavings = item.kWhSavings * fatorProporcao;
 
                         items.Add(item);
                     }
@@ -5110,9 +5116,15 @@ namespace SusteniWebServices.Controllers
                         double diasAnalise = logonInfo.Parameters.analysisDays > 0 ? logonInfo.Parameters.analysisDays : 365;
                         double fatorProporcao = diasAnalise / 365.0;
 
-
                         item.SavingsYear = item.FuelSaving * 1000 * item.OilPrice * ((item.Effect - item.Savings) * 100 / item.Total) / 100 * fatorProporcao;
-
+                        item.EffectCostYear = item.EffectCostYear * fatorProporcao;
+                        item.SavingsCostYear = item.SavingsCostYear * fatorProporcao;
+                        item.FuelSaving = item.FuelSaving * fatorProporcao;
+                        item.MaintenaceCost = item.MaintenaceCost * fatorProporcao;
+                        item.CO2Savings = item.CO2Savings * fatorProporcao;
+                        item.NOxSavings = item.NOxSavings * fatorProporcao;
+                        item.SOxSavings = item.SOxSavings * fatorProporcao;
+                        item.kWhSavings = item.kWhSavings * fatorProporcao;
 
                         sql = "INSERT INTO tmpTable(UserGuid, [Order], Id, ProfilGuid, Profile, Name, Value, Ext) VALUES('" + logonInfo.UserId + "',1,'ListOfMesures','" + item.ProfilGuid + "','" + item.ProfilName + "','" + item.Name + "','" + item.SavingsYear.ToString().Replace(",",".") + "','" + logonInfo.Currency + "')";
                         ExecuteSQL(conString, sql);
@@ -5149,7 +5161,10 @@ namespace SusteniWebServices.Controllers
 
                         if (item.SavingsYear > 0 || item.MaintenaceCost > 0)
                         {
-                            sql = "INSERT INTO tmpTable(UserGuid, [Order], Id, ProfilGuid, Profile, Name, Price, Ext) VALUES('" + logonInfo.UserId + "',12,'MesuresTable','" + item.ProfilGuid + "','" + item.ProfilName + "','Payback time','" + (Convert.ToInt16((item.Cost / (item.SavingsYear + item.MaintenaceCost)) * 12)) + "','months')";
+                            double paybackTime = (item.Cost / (item.SavingsYear + item.MaintenaceCost)) * 12;
+                            // Ajustando o payback time para o período de análise
+                            paybackTime = paybackTime * (365.0 / diasAnalise);
+                            sql = "INSERT INTO tmpTable(UserGuid, [Order], Id, ProfilGuid, Profile, Name, Price, Ext) VALUES('" + logonInfo.UserId + "',12,'MesuresTable','" + item.ProfilGuid + "','" + item.ProfilName + "','Payback time','" + Convert.ToInt16(paybackTime) + "','months')";
                             ExecuteSQL(conString, sql);
                         }
 
